@@ -1,0 +1,109 @@
+Created trace file: test_app_proc0.trace with 10 instructions
+Created empty trace file: test_app_proc1.trace
+Created empty trace file: test_app_proc2.trace
+Created empty trace file: test_app_proc3.trace
+===== Test Simulation Configuration =====
+Application: test_app
+Cache Configuration:
+  Sets: 4 (2^2)
+  Associativity: 2
+  Block Size: 16 bytes (2^4)
+=====================================
+
+Starting simulation...
+
+============= CYCLE 1 =============
+Cache (Core 0):
+  Sets: 4, Block size: 16 bytes
+  Statistics: Accesses=1, Hits=0, Misses=1
+Set 0:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 1:
+  Line 0: Valid, Tag: 0x00000000, Clean, LRU: 0
+  Line 1: Invalid
+Set 2:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 3:
+  Line 0: Invalid
+  Line 1: Invalid
+
+Cache (Core 1):
+  Sets: 4, Block size: 16 bytes
+  Statistics: Accesses=0, Hits=0, Misses=0
+Set 0:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 1:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 2:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 3:
+  Line 0: Invalid
+  Line 1: Invalid
+
+Cache (Core 2):
+  Sets: 4, Block size: 16 bytes
+  Statistics: Accesses=0, Hits=0, Misses=0
+Set 0:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 1:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 2:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 3:
+  Line 0: Invalid
+  Line 1: Invalid
+
+Cache (Core 3):
+  Sets: 4, Block size: 16 bytes
+  Statistics: Accesses=0, Hits=0, Misses=0
+Set 0:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 1:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 2:
+  Line 0: Invalid
+  Line 1: Invalid
+Set 3:
+  Line 0: Invalid
+  Line 1: Invalid
+
+Processor 0:
+  Status: Blocked
+  Instructions Executed: 0
+  Cycles Blocked: 0
+  Has More Instructions: Yes
+
+Processor 1:
+  Status: Ready
+  Instructions Executed: 0
+  Cycles Blocked: 0
+  Has More Instructions: No
+
+Processor 2:
+  Status: Ready
+  Instructions Executed: 0
+  Cycles Blocked: 0
+  Has More Instructions: No
+
+Processor 3:
+  Status: Ready
+  Instructions Executed: 0
+  Cycles Blocked: 0
+  Has More Instructions: No
+
+Main Memory:
+  Reads: 1
+  Writes: 0
+
+========================================
+Press Enter to continue to next cycle...
