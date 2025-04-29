@@ -2,7 +2,9 @@
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
-
+#include "Cache.h"
+#include <vector>
+std::vector<Cache*> allCaches;
 // A single global bus‐reservation timestamp (file‐scope)
 // ensures we serialize all bus transactions.
 static unsigned int busBusyUntil = 0;
@@ -51,15 +53,22 @@ void Simulator::initializeComponents() {
   int blockSize = 1 << config.blockBits;
 
   // 1) Create one Cache + Processor per core
-  for (int i = 0; i < 4; ++i) {
-    caches.emplace_back(std::make_unique<Cache>(
-      i, numSets, config.associativity,
-      blockSize, config.setBits,
-      config.blockBits, mainMemory));
+  
+  allCaches.clear();
+   for (int i = 0; i < 4; ++i) {
+        // 1) make each cache
+        caches.emplace_back(std::make_unique<Cache>(
+            i, numSets, config.associativity,
+            blockSize, config.setBits,
+            config.blockBits, mainMemory));
 
-    processors.emplace_back(std::make_unique<Processor>(
-      i, traceReader, *caches.back()));
-  }
+        // 2) register its raw pointer
+        allCaches.push_back(caches.back().get());
+
+        // 3) make its processor
+        processors.emplace_back(std::make_unique<Processor>(
+            i, traceReader, *caches.back()));
+    }
 
   // 2) Hook up coherence: every cache’s issueCoherenceRequest →
   //    we arbitrate and snoop here.
@@ -116,6 +125,10 @@ void Simulator::initializeComponents() {
             dataProvided = true;
             sourceCore   = core;
             cacheToCache++;
+            std::cerr << "[SNOOP] Cycle " << currentCycle
+                  << ": Core " << core
+                  << " --> Core " << requestingCore
+                  << " on " << (int)t << "\n";
           }
         }
       });
