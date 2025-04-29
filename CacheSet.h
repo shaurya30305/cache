@@ -40,11 +40,28 @@ public:
     // Get vector of all cache lines in this set
     const std::vector<CacheLine>& getLines() const;
     
+    // Get modifiable reference to lines (for coherence operations)
+    std::vector<CacheLine>& getLinesModifiable();
+    
     // Get number of lines in this set (associativity)
     unsigned int getAssociativity() const;
     
     // Get the current LRU counter value
     unsigned int getLRUCounter() const;
+    
+    // New methods for coherence
+    
+    // Invalidate any line with the specified tag
+    bool invalidateLine(uint32_t tag);
+    
+    // Change state of a line with matching tag to Shared
+    bool changeToShared(uint32_t tag);
+    
+    // Find any line in a specific MESI state
+    CacheLine* findLineInState(uint32_t tag, MESIState state);
+    
+    // Check if any line has the tag in any valid state
+    bool hasLineInAnyState(uint32_t tag);
 };
 
 #endif // CACHE_SET_H

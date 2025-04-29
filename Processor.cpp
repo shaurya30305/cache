@@ -1,4 +1,5 @@
 #include "Processor.h"
+#include <iostream>
 #include "Address.h"
 
 // Constructor
@@ -60,6 +61,7 @@ bool Processor::isBlocked() const {
 
 // Set blocked state
 void Processor::setBlocked(bool state) {
+    std::cout << "Processor " << coreId << " setBlocked(" << state << ")" << std::endl;
     if (blocked && !state) {
         // If processor is being unblocked, count the instruction that caused blocking
         instructionsExecuted++;

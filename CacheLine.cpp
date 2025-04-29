@@ -3,28 +3,73 @@
 #include <iostream>
 
 // Constructor - initialize an empty cache line with specified block size
-CacheLine::CacheLine(int blockSize) : valid(false), dirty(false), tag(0), lruCounter(0) {
+CacheLine::CacheLine(int blockSize) 
+    : mesiState(MESIState::INVALID), dirty(false), tag(0), lruCounter(0) {
     // Initialize data vector with specified block size (in bytes)
     data.resize(blockSize, 0);
 }
 
 // Reset the cache line (invalidate)
 void CacheLine::reset() {
-    valid = false;
+    mesiState = MESIState::INVALID;
     dirty = false;
     tag = 0;
     lruCounter = 0;
     std::fill(data.begin(), data.end(), 0);
 }
 
-// Check if the line is valid
+// Get MESI state
+MESIState CacheLine::getMESIState() const {
+    return mesiState;
+}
+
+// Set MESI state
+void CacheLine::setMESIState(MESIState state) {
+    // If transitioning from M to another state, data should be written back
+    if (mesiState == MESIState::MODIFIED && state != MESIState::MODIFIED) {
+        dirty = true;  // Ensure dirty bit is set for write-back
+    }
+    
+    // If transitioning to INVALID, no need to keep dirty information
+    if (state == MESIState::INVALID) {
+        dirty = false;
+    }
+    
+    // If transitioning to SHARED or EXCLUSIVE from MODIFIED, data is now clean
+    if ((state == MESIState::SHARED || state == MESIState::EXCLUSIVE) && 
+        mesiState == MESIState::MODIFIED) {
+        dirty = false;
+    }
+    
+    mesiState = state;
+}
+
+// Helper methods for checking MESI states
+bool CacheLine::isModified() const {
+    return mesiState == MESIState::MODIFIED;
+}
+
+bool CacheLine::isExclusive() const {
+    return mesiState == MESIState::EXCLUSIVE;
+}
+
+bool CacheLine::isShared() const {
+    return mesiState == MESIState::SHARED;
+}
+
+bool CacheLine::isInvalid() const {
+    return mesiState == MESIState::INVALID;
+}
+
+// Check if the line is valid (any state except INVALID)
 bool CacheLine::isValid() const {
-    return valid;
+    return mesiState != MESIState::INVALID;
 }
 
 // Check if the line is dirty
 bool CacheLine::isDirty() const {
-    return dirty;
+    // In MESI, MODIFIED state implies dirty
+    return mesiState == MESIState::MODIFIED || dirty;
 }
 
 // Get the tag
@@ -34,7 +79,7 @@ uint32_t CacheLine::getTag() const {
 
 // Match tag - returns true if this line contains the specified tag
 bool CacheLine::matchTag(uint32_t tagToMatch) const {
-    return valid && (tag == tagToMatch);
+    return isValid() && (tag == tagToMatch);
 }
 
 // Get LRU counter value
@@ -53,7 +98,7 @@ void CacheLine::updateLRU(unsigned int newValue) {
 }
 
 // Load data into the cache line
-void CacheLine::loadData(const std::vector<uint8_t>& newData, uint32_t newTag) {
+void CacheLine::loadData(const std::vector<uint8_t>& newData, uint32_t newTag, MESIState state) {
     if (newData.size() != data.size()) {
         std::cerr << "Error: Data size mismatch in cache line load" << std::endl;
         return;
@@ -62,15 +107,17 @@ void CacheLine::loadData(const std::vector<uint8_t>& newData, uint32_t newTag) {
     // Copy data
     std::copy(newData.begin(), newData.end(), data.begin());
     
-    // Set tag and valid bit
+    // Set tag and state
     tag = newTag;
-    valid = true;
-    dirty = false; // Initial load is clean
+    mesiState = state;
+    
+    // Initial load is clean unless in MODIFIED state
+    dirty = (state == MESIState::MODIFIED);
 }
 
 // Read a word (4 bytes) from the cache line
 uint32_t CacheLine::readWord(uint32_t offset) const {
-    if (!valid) {
+    if (!isValid()) {
         std::cerr << "Error: Attempting to read from invalid cache line" << std::endl;
         return 0;
     }
@@ -92,7 +139,7 @@ uint32_t CacheLine::readWord(uint32_t offset) const {
 
 // Write a word (4 bytes) to the cache line
 void CacheLine::writeWord(uint32_t offset, uint32_t value) {
-    if (!valid) {
+    if (!isValid()) {
         std::cerr << "Error: Attempting to write to invalid cache line" << std::endl;
         return;
     }
@@ -108,20 +155,29 @@ void CacheLine::writeWord(uint32_t offset, uint32_t value) {
     data[offset + 2] = (value >> 16) & 0xFF;
     data[offset + 3] = (value >> 24) & 0xFF;
     
-    // Mark as dirty
+    // A write always makes the line MODIFIED in MESI
+    mesiState = MESIState::MODIFIED;
     dirty = true;
 }
 
 // Mark line as dirty (after a write)
 void CacheLine::setDirty() {
-    if (valid) {
+    if (isValid()) {
         dirty = true;
+        
+        // In MESI, a write to a valid line makes it MODIFIED
+        mesiState = MESIState::MODIFIED;
     }
 }
 
 // Clear dirty bit (after write-back)
 void CacheLine::clearDirty() {
     dirty = false;
+    
+    // If the line was in MODIFIED state, it becomes EXCLUSIVE after write-back
+    if (mesiState == MESIState::MODIFIED) {
+        mesiState = MESIState::EXCLUSIVE;
+    }
 }
 
 // Get entire data block
@@ -132,4 +188,15 @@ const std::vector<uint8_t>& CacheLine::getData() const {
 // Get block size
 size_t CacheLine::getBlockSize() const {
     return data.size();
+}
+
+// String representation of MESI state
+std::string CacheLine::getMESIStateString() const {
+    switch (mesiState) {
+        case MESIState::MODIFIED:  return "MODIFIED";
+        case MESIState::EXCLUSIVE: return "EXCLUSIVE";
+        case MESIState::SHARED:    return "SHARED";
+        case MESIState::INVALID:   return "INVALID";
+        default:                   return "UNKNOWN";
+    }
 }

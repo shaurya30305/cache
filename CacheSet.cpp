@@ -15,7 +15,6 @@ CacheSet::CacheSet(unsigned int associativity, int blockSize)
 }
 
 // Find a cache line matching the specified tag
-// Returns pointer to the line if found, nullptr if not found
 CacheLine* CacheSet::findLine(uint32_t tag) {
     for (auto& line : lines) {
         if (line.isValid() && line.getTag() == tag) {
@@ -26,7 +25,6 @@ CacheLine* CacheSet::findLine(uint32_t tag) {
 }
 
 // Find a cache line matching the specified tag (const version)
-// Returns pointer to the line if found, nullptr if not found
 const CacheLine* CacheSet::findLine(uint32_t tag) const {
     for (const auto& line : lines) {
         if (line.isValid() && line.getTag() == tag) {
@@ -37,7 +35,6 @@ const CacheLine* CacheSet::findLine(uint32_t tag) const {
 }
 
 // Find a victim line for replacement using LRU policy
-// Returns pointer to the LRU line
 CacheLine* CacheSet::findVictim() {
     // First, try to find an invalid line
     CacheLine* invalidLine = findInvalidLine();
@@ -104,7 +101,6 @@ bool CacheSet::isFull() const {
 }
 
 // Find an invalid line if one exists
-// Returns pointer to an invalid line, or nullptr if all lines are valid
 CacheLine* CacheSet::findInvalidLine() {
     for (auto& line : lines) {
         if (!line.isValid()) {
@@ -119,6 +115,11 @@ const std::vector<CacheLine>& CacheSet::getLines() const {
     return lines;
 }
 
+// Get modifiable reference to lines (for coherence operations)
+std::vector<CacheLine>& CacheSet::getLinesModifiable() {
+    return lines;
+}
+
 // Get number of lines in this set (associativity)
 unsigned int CacheSet::getAssociativity() const {
     return associativity;
@@ -127,4 +128,49 @@ unsigned int CacheSet::getAssociativity() const {
 // Get the current LRU counter value
 unsigned int CacheSet::getLRUCounter() const {
     return lruCounter;
+}
+
+// Invalidate any line with the specified tag
+bool CacheSet::invalidateLine(uint32_t tag) {
+    for (auto& line : lines) {
+        if (line.isValid() && line.getTag() == tag) {
+            line.setMESIState(MESIState::INVALID);
+            return true;
+        }
+    }
+    return false;
+}
+
+// Change state of a line with matching tag to Shared
+bool CacheSet::changeToShared(uint32_t tag) {
+    for (auto& line : lines) {
+        if (line.isValid() && line.getTag() == tag) {
+            if (line.getMESIState() == MESIState::MODIFIED || 
+                line.getMESIState() == MESIState::EXCLUSIVE) {
+                line.setMESIState(MESIState::SHARED);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Find any line in a specific MESI state
+CacheLine* CacheSet::findLineInState(uint32_t tag, MESIState state) {
+    for (auto& line : lines) {
+        if (line.isValid() && line.getTag() == tag && line.getMESIState() == state) {
+            return &line;
+        }
+    }
+    return nullptr;
+}
+
+// Check if any line has the tag in any valid state
+bool CacheSet::hasLineInAnyState(uint32_t tag) {
+    for (const auto& line : lines) {
+        if (line.isValid() && line.getTag() == tag) {
+            return true;
+        }
+    }
+    return false;
 }

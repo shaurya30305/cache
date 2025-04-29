@@ -64,7 +64,15 @@ public:
     
     // Initialize simulation
     bool initialize();
-    
+    // Expose the current cycle counter
+    unsigned int getCurrentCycle() const { return currentCycle; }
+
+    // Expose the cache and processor arrays
+    const std::vector<std::unique_ptr<Cache>>& getCaches() const { return caches; }
+    const std::vector<std::unique_ptr<Processor>>& getProcessors() const { return processors; }
+
+    // Expose the memory stats
+    const MainMemory& getMainMemory() const { return mainMemory; }
     // Get statistics
     unsigned int getTotalInstructions() const;
     unsigned int getTotalCycles() const;
