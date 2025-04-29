@@ -71,7 +71,7 @@ void Simulator::initializeComponents() {
     }
 
   // 2) Hook up coherence: every cache’s issueCoherenceRequest →
-  //    we arbitrate and snoop here.
+  // we arbitrate and snoop here.
   for (auto& cachePtr : caches) {
     cachePtr->setCoherenceCallback(
       [this, blockSize](BusTransaction t,
