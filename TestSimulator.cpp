@@ -212,7 +212,7 @@ public:
             unsigned wbacks    = cache.getWritebackCount();
             
             unsigned idleCycles= proc.getCyclesBlocked();
-            unsigned execCycles = finishCycle[c] - idleCycles;
+            unsigned execCycles = getCurrentCycle() - idleCycles;
             double   missRate  = accesses 
                                 ? double(misses)/accesses 
                                 : 0.0;
