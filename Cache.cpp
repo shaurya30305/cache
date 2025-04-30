@@ -47,12 +47,7 @@ bool Cache::read(const Address& addr) {
     // Decode address: set index, tag
     uint32_t setIndex = addr.getIndex();
     uint32_t tag      = addr.getTag();
-    std::cout << "[READ] Cycle " << currentCycle 
-          << ": Core " << coreId 
-          << " reading addr 0x" << std::hex << addr.getTag()
-          << " => set=" << std::dec << setIndex
-          << " tag=0x" << std::hex << tag << std::dec
-          << "\n";
+    
     // Bounds check
     if (setIndex >= sets.size()) {
         std::cerr << "Cache::read(): setIndex out of range: " << setIndex << std::endl;
@@ -61,17 +56,7 @@ bool Cache::read(const Address& addr) {
 
     CacheSet& cacheSet = sets[setIndex];
     CacheLine* line    = cacheSet.findLine(tag);
-    if (line) {
-        std::cout << "[HIT]  Cycle " << currentCycle
-                  << ": Core " << coreId
-                  << " hit in set=" << setIndex
-                  << " way (tag=0x" << std::hex << tag << std::dec << ")\n";
-    } else {
-        std::cout << "[MISS] Cycle " << currentCycle
-                  << ": Core " << coreId
-                  << " miss in set=" << setIndex
-                  << " tag=0x" << std::hex << tag << std::dec << "\n";
-    }
+    
     
     if (line) {
         // CACHE HIT
@@ -88,7 +73,12 @@ bool Cache::read(const Address& addr) {
 
     // Select victim line (invalid preferred, else LRU)
     CacheLine* victim = cacheSet.findVictim();
-
+    if (victim ->isValid()) {
+        evictionCount++;
+        if (victim -> isDirty()) {
+            writebackCount++;
+        }
+    }
     // If victim is dirty (Modified), write back to memory first
     if (victim->isValid() && victim->isDirty()) {
         uint32_t victimTag       = victim->getTag();
@@ -125,17 +115,11 @@ bool Cache::read(const Address& addr) {
 
     // Timing: 2 cycles/word if from cache, else 100 cycles memory
     if (dataSourceCache >= 0) {
-        std::cout << "[C2C  ] Cycle " << currentCycle
-        << ": Core " << coreId
-        << " fetched from Core " << dataSourceCache
-        << std::endl;
+        
         int numWords = blockSize / 4;
         missResolveTime += 2 * numWords;
     } else {
-        std::cout << "[DRAM ] Cycle " << currentCycle
-        << ": Core " << coreId
-        << " fetched from DRAM"
-        << std::endl;
+        
         missResolveTime += 100;
     }
     
@@ -161,12 +145,7 @@ bool Cache::write(const Address& addr) {
     uint32_t tag      = addr.getTag();
     uint32_t offset   = addr.getOffset();
 
-    std::cout << "[WRITE] Cycle " << currentCycle 
-          << ": Core " << coreId 
-          << " writing addr 0x" << std::hex << addr.getTag()
-          << " => set=" << std::dec << setIndex
-          << " tag=0x" << std::hex << tag << std::dec
-          << "\n";
+    
 
     if (setIndex >= sets.size()) {
         std::cerr << "Cache::write(): setIndex out of range: " << setIndex << std::endl;
@@ -183,10 +162,7 @@ bool Cache::write(const Address& addr) {
 
         MESIState curState = line->getMESIState();
         if (curState == MESIState::SHARED || curState == MESIState::EXCLUSIVE) {
-            std::cout << "[UPGRADE] Cycle " << currentCycle
-                  << ": Core " << coreId
-                  << " upgrading from " << (curState == MESIState::SHARED ? "S" : "E")
-                  << " to M state" << std::endl;
+            
                   
             // Need to invalidate other copies if in SHARED state
             if (curState == MESIState::SHARED) {
@@ -214,13 +190,17 @@ bool Cache::write(const Address& addr) {
     pendingMiss     = true;
     dataSourceCache = -1;
 
-    std::cout << "[MISS] Cycle " << currentCycle
-              << ": Core " << coreId
-              << " write miss in set=" << setIndex
-              << " tag=0x" << std::hex << tag << std::dec << "\n";
+   
 
     CacheLine* victim = cacheSet.findVictim();
+    if (victim ->isValid()) {
+        evictionCount++;
+        if (victim -> isDirty()) {
+            writebackCount++;
+        }
+    }
     if (victim->isValid() && victim->isDirty()) {
+
         uint32_t victimTag       = victim->getTag();
         uint32_t victimBlockAddr = (victimTag << (setBits + blockBits))
                                     | (setIndex << blockBits);
@@ -230,9 +210,7 @@ bool Cache::write(const Address& addr) {
         int  dummySource   = -1;
         issueCoherenceRequest(BusTransaction::FLUSH, flushAddr, dummyProvided, dummySource);
         
-        std::cout << "[EVICT] Cycle " << currentCycle
-                  << ": Core " << coreId
-                  << " evicting dirty block (tag=0x" << std::hex << victimTag << std::dec << ")\n";
+        
                   
         mainMemory.writeBlock(victimBlockAddr, victim->getData());
         missResolveTime = currentCycle + 100;
@@ -247,9 +225,7 @@ bool Cache::write(const Address& addr) {
     
     if (providedByPeer) {
         dataSourceCache = peerId;
-        std::cout << "[COHERENCE] Cycle " << currentCycle
-                  << ": Core " << coreId
-                  << " got data from Core " << dataSourceCache << "\n";
+        
     } else {
         // Important: Check if any other cache had data that they wrote back and invalidated
         // This is necessary because BUS_RDX causes all other caches to invalidate their copies
@@ -266,10 +242,7 @@ bool Cache::write(const Address& addr) {
                 auto& lines = sets[addr.getIndex()].getLines();
                 for (auto& line : lines) {
                     if (!line.isValid() && line.getTag() == addr.getTag()) {
-                        std::cout << "[COHERENCE] Cycle " << currentCycle
-                                << ": Core " << coreId
-                                << " using data previously in Core " << i
-                                << " (now in memory)" << "\n";
+                        
                         dataSourceCache = i;
                         break;
                     }
@@ -339,10 +312,7 @@ std::vector<uint8_t> Cache::fetchBlockFromMemoryOrCache(const Address& addr,
 
     // 1) If some peer supplied it, get from cache
     if (dataSourceCache >= 0 && dataSourceCache < (int)allCaches.size()) {
-        std::cout << "[C2C FETCH] Cycle " << currentCycle
-                << ": Core " << coreId
-                << " fetching data from Core " << dataSourceCache
-                << std::endl;
+        
                 
         Cache* supplier = allCaches[dataSourceCache];
         auto& sets = supplier->getSets();
@@ -357,16 +327,11 @@ std::vector<uint8_t> Cache::fetchBlockFromMemoryOrCache(const Address& addr,
         }
         
         // Fallback if peer data not found (shouldn't happen if coherence works correctly)
-        std::cout << "[ERROR] Cycle " << currentCycle
-                << ": Peer data not found, using memory instead"
-                << std::endl;
+        
     }
     
     // 2) Otherwise, fetch from main memory
-    std::cout << "[DRAM FETCH] Cycle " << currentCycle
-            << ": Core " << coreId
-            << " fetching from DRAM"
-            << std::endl;
+   
             
     return mainMemory.readBlock(blockAddr);
 }
@@ -388,20 +353,14 @@ bool Cache::handleBusTransaction(BusTransaction transType,
 
     MESIState curState = line->getMESIState();
     
-    std::cout << "[SNOOP] Cycle " << currentCycle
-              << ": Core " << coreId
-              << " snooping " << (int)transType
-              << " for addr=0x" << std::hex << addr.getTag() << std::dec
-              << " curState=" << (int)curState << std::endl;
+    
     
     switch (transType) {
       case BusTransaction::BUS_RD:
         // Another cache wants to read this data
         if (curState == MESIState::MODIFIED) {
             // Need to write back modified data and transition to SHARED
-            std::cout << "[SNOOP] Cycle " << currentCycle
-                  << ": Core " << coreId
-                  << " writing back modified data and moving to SHARED" << std::endl;
+            
                   
             mainMemory.writeBlock(addr.getBlockAddress(), line->getData());
             line->setMESIState(MESIState::SHARED);
@@ -409,9 +368,7 @@ bool Cache::handleBusTransaction(BusTransaction transType,
             return true;
         } else if (curState == MESIState::EXCLUSIVE) {
             // No need to write back, but transition to SHARED
-            std::cout << "[SNOOP] Cycle " << currentCycle
-                  << ": Core " << coreId
-                  << " moving from EXCLUSIVE to SHARED" << std::endl;
+            
                   
             line->setMESIState(MESIState::SHARED);
             providedData = true;
@@ -428,17 +385,12 @@ bool Cache::handleBusTransaction(BusTransaction transType,
         if (curState != MESIState::INVALID) {
             if (curState == MESIState::MODIFIED) {
                 // Write back before invalidating
-                std::cout << "[SNOOP] Cycle " << currentCycle
-                      << ": Core " << coreId
-                      << " writing back modified data before invalidating" << std::endl;
+                
                       
                 mainMemory.writeBlock(addr.getBlockAddress(), line->getData());
                 providedData = true;
             }
             
-            std::cout << "[SNOOP] Cycle " << currentCycle
-                  << ": Core " << coreId
-                  << " invalidating line due to BUS_RDX" << std::endl;
                   
             line->setMESIState(MESIState::INVALID);
             return true;
@@ -448,9 +400,7 @@ bool Cache::handleBusTransaction(BusTransaction transType,
       case BusTransaction::INVALIDATE:
         // Explicit invalidate request
         if (curState != MESIState::INVALID) {
-            std::cout << "[SNOOP] Cycle " << currentCycle
-                  << ": Core " << coreId
-                  << " invalidating line due to INVALIDATE" << std::endl;
+            
                   
             if (curState == MESIState::MODIFIED) {
                 // Write back before invalidating
@@ -466,9 +416,7 @@ bool Cache::handleBusTransaction(BusTransaction transType,
       case BusTransaction::BUS_UPGR:
         // Another cache wants to upgrade from SHARED to MODIFIED
         if (curState == MESIState::SHARED) {
-            std::cout << "[SNOOP] Cycle " << currentCycle
-                  << ": Core " << coreId
-                  << " dropping shared copy due to UPGRADE" << std::endl;
+          
                   
             // Drop shared copy
             line->setMESIState(MESIState::INVALID);
@@ -478,9 +426,7 @@ bool Cache::handleBusTransaction(BusTransaction transType,
 
       case BusTransaction::FLUSH:
         // Another core wrote back; no local state change
-        std::cout << "[SNOOP] Cycle " << currentCycle
-              << ": Core " << coreId
-              << " observed FLUSH (no state change)" << std::endl;
+      
               
         return true;
     }
@@ -503,3 +449,5 @@ int Cache::getAssociativity() const {
 }
 const std::vector<CacheSet>& Cache::getSets() const { return sets; }
 bool Cache::hasPendingMiss() const { return pendingMiss; }
+unsigned int Cache::getEvictionCount() const {return evictionCount; }
+unsigned int Cache::getWritebackCount() const {return writebackCount;}

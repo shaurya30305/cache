@@ -33,7 +33,7 @@ public:
     
     // Check if processor has more instructions
     bool hasMoreInstructions() const;
-    
+    void incrementCyclesBlocked() { cyclesBlocked++; }
     // Get statistics
     unsigned int getCyclesBlocked() const;
     unsigned int getInstructionsExecuted() const;

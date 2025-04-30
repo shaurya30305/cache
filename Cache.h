@@ -50,7 +50,8 @@ public:
     unsigned int getReadCount() const;
     unsigned int getWriteCount() const;
     unsigned int getCoherenceCount() const;
-
+    unsigned int getEvictionCount() const;
+    unsigned int getWritebackCount() const;
     // Configuration
     int getSetBits() const;
     int getBlockBits() const;
@@ -96,6 +97,8 @@ private:
     unsigned int readCount;
     unsigned int writeCount;
     unsigned int coherenceCount;
+    unsigned int evictionCount = 0;
+    unsigned int writebackCount = 0;
     bool pendingMiss;
     unsigned int missResolveTime;
     unsigned int currentCycle;

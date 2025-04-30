@@ -4,7 +4,8 @@
 #include <algorithm>
 #include "Cache.h"
 #include <vector>
-std::vector<Cache*> allCaches;
+#include "Processor.h"
+std::vector<Cache*> allCaches; 
 // A single global bus‐reservation timestamp (file‐scope)
 // ensures we serialize all bus transactions.
 static unsigned int busBusyUntil = 0;
@@ -20,7 +21,9 @@ Simulator::Simulator(const SimulationConfig& config)
     totalMemoryAccesses(0),
     totalCacheHits(0),
     totalCacheMisses(0),
-    cacheToCache(0)
+    cacheToCache(0),
+    busTrafficBytes(0),
+    invalidationCount(0)
 { }
 
 // Destructor
@@ -85,27 +88,60 @@ void Simulator::initializeComponents() {
         unsigned int numWords = blockSize / 4;
         unsigned int length = 0;
 
-        switch (t) {
-          case BusTransaction::BUS_RD:
-          case BusTransaction::BUS_RDX:
-            // Transfer entire block: 2 cycles per word
-            length = 2 * numWords;
+        switch(t) {
+  case BusTransaction::BUS_RD:
+  case BusTransaction::BUS_RDX: {
+    // for RDX we count sharers; bundle into its own block
+    if (t == BusTransaction::BUS_RDX) {
+      unsigned int setIdx = addr.getIndex();
+      uint32_t     tag    = addr.getTag();
+      unsigned int sharers = 0;
+      for (int c = 0; c < (int)caches.size(); ++c) {
+        if (c == requestingCore) continue;
+        auto& lines = caches[c]->getSets()[setIdx].getLines();
+        for (auto& L : lines) {
+          if (L.isValid() && L.getTag() == tag) {
+            sharers++;
             break;
-
-          case BusTransaction::BUS_UPGR:
-          case BusTransaction::INVALIDATE:
-            // Just an invalidate or upgrade packet
-            length = 2;
-            break;
-
-          case BusTransaction::FLUSH:
-            // Write back dirty block to memory
-            length = 100;
-            break;
-
-          default:
-            length = 0;
+          }
         }
+      }
+      invalidationCount += sharers;
+      busTrafficBytes  += blockSize;
+    }
+    // BUS_RD or BUS_RDX both transfer the full block:
+    length = 2 * (blockSize / 4);
+    busTrafficBytes += (t == BusTransaction::BUS_RD ? blockSize : 0);  
+    break;
+  }
+
+  case BusTransaction::BUS_UPGR: {
+    // single invalidate packet
+    invalidationCount += 1;
+    length = 2;
+    break;
+  }
+
+  case BusTransaction::INVALIDATE: {
+    // same as an explicit invalidate
+    invalidationCount += 1;
+    length = 2;
+    break;
+  }
+
+  case BusTransaction::FLUSH: {
+    // writeback
+    length = 100;
+    busTrafficBytes += blockSize;
+    break;
+  }
+
+  default: {
+    length = 0;
+    break;
+  }
+}
+
 
         // Bus arbitration: start when free
         unsigned int startCycle = std::max(currentCycle, busBusyUntil);
@@ -125,10 +161,7 @@ void Simulator::initializeComponents() {
             dataProvided = true;
             sourceCore   = core;
             cacheToCache++;
-            std::cerr << "[SNOOP] Cycle " << currentCycle
-                  << ": Core " << core
-                  << " --> Core " << requestingCore
-                  << " on " << (int)t << "\n";
+            
           }
         }
       });
@@ -166,6 +199,8 @@ bool Simulator::processNextCycle() {
 
   // Let each core try its next instruction if not blocked
   for (auto& p : processors) {
+    if (p->isBlocked()) 
+       p->incrementCyclesBlocked();
     if (!p->isBlocked() && p->hasMoreInstructions())
       p->executeNextInstruction();
   }
@@ -204,6 +239,13 @@ unsigned int   Simulator::getTotalCycles()            const { return totalCycles
 double         Simulator::getAverageMemoryAccessTime()const {
   return totalMemoryAccesses==0 ? 0.0
        : double(totalCycles)/totalMemoryAccesses;
+}
+unsigned int Simulator::getInvalidationCount() const {
+  return invalidationCount;
+}
+
+unsigned int Simulator::getBusTrafficBytes() const {
+  return busTrafficBytes;
 }
 
 void Simulator::printResults() const {

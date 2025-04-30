@@ -1,4 +1,3 @@
-#include "CommandLine.h"    // For SimulationConfig
 #include "Simulator.h"
 #include "Cache.h"
 #include "CacheSet.h"
@@ -12,45 +11,104 @@
 #include <iomanip>
 #include <vector>
 #include <string>
+#include <getopt.h>
 
-// Function to create per-core trace files that exercise MESI coherence
-// Writes directly to working directory so TraceReader can find them
-void createTestTraceFiles(const std::string& appName) {
-    // CORE 0: Write then read same block (M → hit)
-    {
-        std::ofstream f(appName + "_proc0.trace");
-        f << "W 0x00001000" << std::endl;
-        f << "R 0x00001004" << std::endl;
-    }
-    std::cout << "Created '" << appName << "_proc0.trace' [W 0x1000, R 0x1004]" << std::endl;
 
-    // CORE 1: Dummy read then read the block Core0 wrote (tests M→S)
-    {
-        std::ofstream f(appName + "_proc1.trace");
-        f << "R 0x00003000" << std::endl;
-        f << "R 0x00001000" << std::endl;
-    }
-    std::cout << "Created '" << appName << "_proc1.trace' [R 0x3000, R 0x1000]" << std::endl;
 
-    // CORE 2: Two dummy reads then write same block (tests invalidation)
-    {
-        std::ofstream f(appName + "_proc2.trace");
-        f << "R 0x00004000" << std::endl;
-        f << "R 0x00004004" << std::endl;
-        f << "W 0x00001000" << std::endl;
+// Parse command line arguments and return configuration
+SimulationConfig parseCommandLineArguments(int argc, char* argv[]) {
+    SimulationConfig config;
+    int opt;
+    
+    // Define the valid options
+    const char* optString = "ht:s:E:b:o:";
+    
+    // Process each option
+    while ((opt = getopt(argc, argv, optString)) != -1) {
+        switch (opt) {
+            case 'h':
+                config.helpRequested = true;
+                break;
+                
+            case 't':
+                config.appName = optarg;
+                break;
+                
+            case 's':
+                config.setBits = std::stoi(optarg);
+                break;
+                
+            case 'E':
+                config.associativity = std::stoi(optarg);
+                break;
+                
+            case 'b':
+                config.blockBits = std::stoi(optarg);
+                break;
+                
+            case 'o':
+                config.outputFile = optarg;
+                break;
+                
+            default:
+                // Invalid option
+                std::cerr << "Unknown option: " << static_cast<char>(optopt) << std::endl;
+                config.helpRequested = true;
+                break;
+        }
     }
-    std::cout << "Created '" << appName << "_proc2.trace' [R 0x4000, R 0x4004, W 0x1000]" << std::endl;
-
-    // CORE 3: Three dummy reads then read same block (tests shared supply)
-    {
-        std::ofstream f(appName + "_proc3.trace");
-        f << "R 0x00005000" << std::endl;
-        f << "R 0x00005004" << std::endl;
-        f << "R 0x00005008" << std::endl;
-        f << "R 0x00001000" << std::endl;
-    }
-    std::cout << "Created '" << appName << "_proc3.trace' [R 0x5000×3, R 0x1000]" << std::endl;
+    
+    return config;
 }
+
+// Validate the configuration
+bool validateConfig(const SimulationConfig& config) {
+    // Skip validation if help was requested
+    if (config.helpRequested) {
+        return true;
+    }
+    
+    bool valid = true;
+    
+    // Check required parameters
+    if (config.appName.empty()) {
+        std::cerr << "Error: Application name (-t) is required" << std::endl;
+        valid = false;
+    }
+    
+    if (config.setBits <= 0) {
+        std::cerr << "Error: Number of set bits (-s) must be positive" << std::endl;
+        valid = false;
+    }
+    
+    if (config.associativity <= 0) {
+        std::cerr << "Error: Associativity (-E) must be positive" << std::endl;
+        valid = false;
+    }
+    
+    if (config.blockBits <= 0) {
+        std::cerr << "Error: Number of block bits (-b) must be positive" << std::endl;
+        valid = false;
+    }
+    
+    return valid;
+}
+
+// Print help message
+void printHelp(const char* programName) {
+    std::cout << "Usage: " << programName << " [OPTIONS]\n";
+    std::cout << "Simulate L1 cache with MESI coherence protocol.\n\n";
+    std::cout << "Options:\n";
+    std::cout << "  -t <n>  : Name of parallel application (e.g. app1) whose 4 traces are to be used in simulation\n";
+    std::cout << "  -s <bits>  : Number of set index bits (number of sets in the cache = S = 2^s)\n";
+    std::cout << "  -E <ways>  : Associativity (number of cache lines per set)\n";
+    std::cout << "  -b <bits>  : Number of block bits (block size = B = 2^b)\n";
+    std::cout << "  -o <file>  : Logs output in file for plotting etc.\n";
+    std::cout << "  -h         : Prints this help\n";
+}
+
+// These functions are kept but not used in the simulation main loop
+// They can be useful for debugging if needed
 
 // Print a single cache line
 void printCacheLine(const CacheLine& line, int setIdx, int wayIdx) {
@@ -69,8 +127,8 @@ void printCacheLine(const CacheLine& line, int setIdx, int wayIdx) {
 
 // Print one cache set
 void printCacheSet(const CacheSet& set, int setIdx) {
-    int ways = set.getAssociativity();
-    for (int w = 0; w < ways; ++w) {
+    // Fix signedness comparison warning
+    for (unsigned int w = 0; w < set.getAssociativity(); ++w) {
         printCacheLine(set.getLines()[w], setIdx, w);
     }
 }
@@ -87,24 +145,28 @@ void printCache(const Cache& c) {
     std::cout << "   Acc=" << c.getAccessCount()
               << " Ht="  << c.getHitCount()
               << " Ms="  << c.getMissCount() << "\n";
-
-    for (int s = 0; s < sets; ++s) {
-        printCacheSet(c.getSets()[s], s);
-    }
+    for (int s = 0; s < sets; ++s) printCacheSet(c.getSets()[s], s);
 }
 
 // Print processor status
 void printProc(const Processor& p) {
     std::cout << "Proc" << p.getCoreId()
               << (p.isBlocked() ? "[Blk]" : "[Run]")
-              << " Exec="    << p.getInstructionsExecuted()
-              << " StallC="  << p.getCyclesBlocked()
-              << " More="    << (p.hasMoreInstructions() ? "Y" : "N")
+              << " Exec="   << p.getInstructionsExecuted()
+              << " StallC=" << p.getCyclesBlocked()
+              << " More="   << (p.hasMoreInstructions() ? "Y" : "N")
               << "\n";
 }
 
-// Test simulator subclass exposing internals
+
+//------------------------------------------------------------------------------
+// Test‐simulator subclass
+//------------------------------------------------------------------------------
 class TestSimulator : public Simulator {
+private:
+    // record finish cycle per core
+    unsigned int finishCycle[4] = {0,0,0,0};
+
 public:
     using Simulator::Simulator;
     using Simulator::isSimulationComplete;
@@ -113,41 +175,110 @@ public:
     using Simulator::getProcessors;
     using Simulator::getMainMemory;
 
+    // override to capture finish cycle (without printing details)
+    bool processNextCycle() override {
+        bool cont = Simulator::processNextCycle();
+
+        // after stepping, check each core
+        for (auto& pp : getProcessors()) {
+            const auto& p = *pp;
+            int cid = p.getCoreId();
+            if (!finishCycle[cid] && !p.hasMoreInstructions()) {
+                finishCycle[cid] = getCurrentCycle();
+            }
+        }
+        return cont;
+    }
+
+    // step + print one cycle - used for debugging if needed
     void stepAndPrint() {
         processNextCycle();
-        std::cout << "\n===== Cycle " << getCurrentCycle() << " =====\n";
-        for (auto& cp : getCaches())     printCache(*cp);
-        for (auto& pp : getProcessors()) printProc(*pp);
-        auto& mem = getMainMemory();
-        std::cout << "Mem[R=" << mem.getReadCount()
-                  << ",W="     << mem.getWriteCount() << "]\n";
+        // All cycle-by-cycle printing removed
+    }
+
+    // after completion, print all eight metrics
+    void printAllStats() const {
+        std::cout << "\n==== Final Statistics ====\n";
+        // per core
+        for (int c = 0; c < 4; ++c) {
+            const auto& cache = *getCaches()[c];
+            const auto& proc  = *getProcessors()[c];
+
+            unsigned reads     = cache.getReadCount();
+            unsigned writes    = cache.getWriteCount();
+            unsigned accesses  = cache.getAccessCount();
+            unsigned misses    = cache.getMissCount();
+            unsigned evicts    = cache.getEvictionCount();
+            unsigned wbacks    = cache.getWritebackCount();
+            
+            unsigned idleCycles= proc.getCyclesBlocked();
+            unsigned execCycles = finishCycle[c] - idleCycles;
+            double   missRate  = accesses 
+                                ? double(misses)/accesses 
+                                : 0.0;
+
+            std::cout << "Core " << c << ":\n";
+            std::cout << "  1) #reads         = " << reads << "\n";
+            std::cout << "     #writes        = " << writes << "\n";
+            std::cout << "  2) exec cycles    = " << execCycles << "\n";
+            std::cout << "  3) idle cycles    = " << idleCycles << "\n";
+            std::cout << "  4) miss rate      = " 
+                      << std::fixed << std::setprecision(2)
+                      << (missRate * 100) << "%\n";
+            std::cout << "  5) evictions      = " << evicts << "\n";
+            std::cout << "  6) writebacks     = " << wbacks << "\n\n";
+        }
+        // global
+        std::cout << "  7) bus invalidations = " 
+                  << getInvalidationCount() << "\n";
+        std::cout << "  8) bus traffic bytes = " 
+                  << getBusTrafficBytes() << "\n";
     }
 };
 
-int main() {
-    std::string appName = "test_app";
-    createTestTraceFiles(appName);
 
-    SimulationConfig cfg;
-    cfg.appName       = appName;
-    cfg.setBits       = 2;  // 4 sets
-    cfg.associativity = 2;  // 2-way
-    cfg.blockBits     = 4;  // 16 bytes
-    cfg.outputFile    = "test_output.log";
-
-    TestSimulator sim(cfg);
+//------------------------------------------------------------------------------
+// main()
+//------------------------------------------------------------------------------
+int main(int argc, char* argv[]) {
+    // Parse command line arguments
+    SimulationConfig config = parseCommandLineArguments(argc, argv);
+    
+    // If help was requested or invalid arguments, print help and exit
+    if (config.helpRequested || !validateConfig(config)) {
+        printHelp(argv[0]);
+        return config.helpRequested ? 0 : 1;  // Exit with error code if invalid args
+    }
+    
+    // Create simulator with the configuration
+    TestSimulator sim(config);
+    
+    // Initialize simulator
     if (!sim.initialize()) {
-        std::cerr << "Init failed\n";
+        std::cerr << "Failed to initialize simulator. Exiting." << std::endl;
         return 1;
     }
-
-    std::cout << "Starting MESI coherence test...\n";
+    
+    // Display simulation parameters
+    std::cout << "===== Simulation Configuration =====\n";
+    std::cout << "Application: " << config.appName << std::endl;
+    std::cout << "Cache Configuration:\n";
+    std::cout << "  Sets: " << (1 << config.setBits) << " (2^" << config.setBits << ")" << std::endl;
+    std::cout << "  Associativity: " << config.associativity << std::endl;
+    std::cout << "  Block Size: " << (1 << config.blockBits) << " bytes (2^" << config.blockBits << ")" << std::endl;
+    std::cout << "Output File: " << (config.outputFile.empty() ? "None" : config.outputFile) << std::endl;
+    std::cout << "=====================================\n\n";
+    
+    // Run simulation without any intermediate output
+    std::cout << "Running simulation...\n";
+    
+    // Run the simulation to completion silently
     while (!sim.isSimulationComplete()) {
-        sim.stepAndPrint();
-        std::cout << "Press Enter...";
-        std::cin.get();
+        sim.processNextCycle();
     }
-    std::cout << "Simulation done.\n";
-    sim.printResults();
+    
+    std::cout << "Simulation completed.\n";
+    sim.printAllStats();
+    
     return 0;
 }

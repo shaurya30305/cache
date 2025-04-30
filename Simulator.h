@@ -19,7 +19,8 @@ private:
     unsigned int totalMemoryAccesses;
     unsigned int totalCacheHits;
     unsigned int totalCacheMisses;
-    
+    unsigned int invalidationCount = 0;
+    unsigned int busTrafficBytes = 0;
     // Cache-to-cache transfers (for coherence)
     unsigned int cacheToCache;
     
@@ -43,7 +44,7 @@ protected: // Changed from private to protected for TestSimulator access
     std::ofstream logFile;
     
     // Protected methods for derived classes
-    bool processNextCycle();
+    virtual bool processNextCycle();
     
     // Add this method for TestSimulator
     bool isSimulationComplete() {
@@ -77,7 +78,8 @@ public:
     unsigned int getTotalInstructions() const;
     unsigned int getTotalCycles() const;
     double getAverageMemoryAccessTime() const;
-    
+    unsigned int getInvalidationCount() const;
+    unsigned int getBusTrafficBytes() const;
     // Print results to console
     void printResults() const;
 };

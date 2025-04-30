@@ -26,6 +26,7 @@ bool Processor::executeNextInstruction() {
     
     // Validate instruction
     if (!inst.isValid()) {
+        cyclesBlocked++;
         return false;
     }
     
@@ -61,7 +62,7 @@ bool Processor::isBlocked() const {
 
 // Set blocked state
 void Processor::setBlocked(bool state) {
-    std::cout << "Processor " << coreId << " setBlocked(" << state << ")" << std::endl;
+ 
     if (blocked && !state) {
         // If processor is being unblocked, count the instruction that caused blocking
         instructionsExecuted++;
