@@ -1,0 +1,44 @@
+
+==== Final Statistics ====
+Core 0:
+  1) #reads         = 1489888
+     #writes        = 1007461
+  2) exec cycles    = 3478513
+  3) idle cycles    = 3828705
+  4) miss rate      = 1.56%
+  5) evictions      = 38887
+  6) writebacks     = 5718
+
+ Maximum execution time = 7307218
+Core 1:
+  1) #reads         = 1485857
+     #writes        = 1004611
+  2) exec cycles    = 3502049
+  3) idle cycles    = 3805169
+  4) miss rate      = 1.55%
+  5) evictions      = 38336
+  6) writebacks     = 5327
+
+ Maximum execution time = 7307218
+Core 2:
+  1) #reads         = 1492629
+     #writes        = 1016428
+  2) exec cycles    = 2509057
+  3) idle cycles    = 4798161
+  4) miss rate      = 1.77%
+  5) evictions      = 44103
+  6) writebacks     = 8986
+
+ Maximum execution time = 7307218
+Core 3:
+  1) #reads         = 1493736
+     #writes        = 1009391
+  2) exec cycles    = 3475209
+  3) idle cycles    = 3832009
+  4) miss rate      = 1.57%
+  5) evictions      = 39070
+  6) writebacks     = 5558
+
+ Maximum execution time = 7307218
+  7) bus invalidations = 312
+  8) bus traffic bytes = 5977696
